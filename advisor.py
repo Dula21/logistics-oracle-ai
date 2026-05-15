@@ -1,39 +1,41 @@
 import pandas as pd
+import os
+from groq import Groq
+from dotenv import load_dotenv
+
+# Load secrets from the .env file
+load_dotenv()
+
+# Initialize the Groq Client
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def get_business_advice():
-    # 1. Load the forecast we just made
+    # 1. Load the forecast
     df = pd.read_csv('forecast_results.csv')
-    
-    # 2. Get the average predicted sales for the next 7 days
     next_week_avg = df.tail(7)['yhat'].mean()
     
-    # 3. Create the "Context" for the AI
-    # We are "painting a picture" for Llama 3.1
-    data_summary = f"""
-    UPCOMING FORECAST DATA:
-    - Average Daily Sales Predicted: {round(next_week_avg, 2)} units.
-    - Peak Prediction: {round(df['yhat'].max(), 2)} units.
-    - Market Location: Dubai (JAFZA/D3).
-    - Current Season: Post-Ramadan / Standard Retail.
-    """
+    # 2. Build the context
+    data_summary = f"Predicted daily sales for next week: {round(next_week_avg, 2)} units."
+
+    # 3. Call the "Brain" (Llama 3.1)
+    completion = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a professional Dubai logistics consultant. Provide 3 sharp, prescriptive business actions."
+            },
+            {
+                "role": "user",
+                "content": f"Based on this sales forecast: {data_summary}, what should the warehouse manager do?"
+            }
+        ],
+        temperature=0.5, # Keeps it professional, not too creative
+    )
     
-    # 4. The "Reasoning" Prompt
-    prompt = f"""
-    You are a Senior Logistics Consultant in Dubai. 
-    Based on this data: {data_summary}
-    
-    Provide 3 specific 'Prescriptive Actions' for the warehouse manager.
-    Focus on:
-    1. Staffing (based on sales volume).
-    2. Inventory (should they restock?).
-    3. Delivery (mention specific Dubai logistics challenges).
-    
-    Keep it punchy and professional.
-    """
-    
-    print("🤖 LOGIC READY. Sending data to the Oracle Advisor...")
-    print("---")
-    print(prompt)
+    # 4. Return the actual AI words
+    return completion.choices[0].message.content
 
 if __name__ == "__main__":
-    get_business_advice()
+    print("🤖 The Oracle is thinking...")
+    print(get_business_advice())
