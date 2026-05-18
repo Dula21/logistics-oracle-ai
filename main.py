@@ -1,38 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import pandas as pd
-from advisor import get_business_advice
+from routers.forecast import router as forecast_router
+from routers.stream import router as stream_router
+from routers.alerts import router as alerts_router
 
-app = FastAPI()
+app = FastAPI(title="Logistics Oracle Pipeline Architecture")
 
-# Allow your Next.js app (on port 3000) to talk to your FastAPI app (on port 8000)
+# Configure CORS so your Next.js dashboard can connect securely
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/api/forecast")
-def get_forecast_data():
-    df = pd.read_csv('forecast_results.csv')
-    recent_df = df.tail(14).copy()
-    
-    # Clean up dates format from 2026-05-16 to "May 16"
-    clean_dates = pd.to_datetime(recent_df['ds']).dt.strftime('%b %d').tolist()
-    
-    # Zip data together into an array of objects matching the frontend chart needs
-    chart_rows = []
-    for _, row in recent_df.iterrows():
-        chart_rows.append({
-            "predicted": int(round(row['yhat'])),
-            "lower": int(round(row['yhat_lower'])),
-            "upper": int(round(row['yhat_upper']))
-        })
-    
-    return {
-        "dates": clean_dates,
-        "rows": chart_rows,
-        "avg_sales": int(round(recent_df['yhat'].mean())),
-        "advice": get_business_advice()
-    }
+# Fix your 404s by routing everything through the global '/api' path
+app.include_router(forecast_router, prefix="/api")
+app.include_router(stream_router, prefix="/api")
+app.include_router(alerts_router, prefix="/api")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
