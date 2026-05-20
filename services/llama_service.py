@@ -1,56 +1,84 @@
+import os
 import httpx
 import json
-from typing import AsyncGenerator
+import asyncio
+from dotenv import load_dotenv
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+load_dotenv()
 
-async def stream_advice(sku_id: str, days: int, stock: int) -> AsyncGenerator[str, None]:
-    """
-    Connects to local Ollama instance and streams real-time token chunks
-    to provide regional logistics advice.
-    """
-    # Dynamic context injection based on our generated patterns
-    seasonal_context = ""
-    if sku_id == "C9011":
-        seasonal_context = "This item experiences massive holiday demand surges (+90%) during Ramadan retail hours."
-    elif sku_id == "B5842":
-        seasonal_context = "This item typically encounters a -20% sales volume drop during active Ramadan fasting windows."
+MODEL_NAME = os.getenv("LLM_MODEL_NAME", "llama3.2")
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/api/generate")
 
-    prompt = f"""
-    You are a logistics and inventory planning optimization engine for a Dubai SME supply chain hub.
-    Target SKU: {sku_id}
-    Current Warehouse Stock: {stock} units
-    Velocity Runway Projection: Will fully stock out in exactly {days} days.
-    Regional Context Variables: {seasonal_context} Focus on JAFZA logistics channels, UAE weekends (Friday/Saturday demand spikes), or regional trade windows.
+_advice_cache = {}
+
+async def stream_advice(sku_id: str, days: int, stock: int):
+    cache_key = f"{sku_id}_{days}_{stock}"
     
-    Task: Provide a sharp, data-driven 2-sentence executive operational instruction. 
-    Be direct. Do not say "Here is the recommendation". Speak directly as the system advisor.
-    """
+    # 1. Cache hit abstraction layer
+    if cache_key in _advice_cache:
+        cached_text = _advice_cache[cache_key]
+        words = cached_text.split(" ")
+        for i, word in enumerate(words):
+            yield word + (" " if i < len(words) - 1 else "")
+            await asyncio.sleep(0.01)
+        return
+
+    prompt_message = (
+        f"You are an expert logistics analyzer. SKU {sku_id} has {stock} units left "
+        f"and is projected to stock out in exactly {days} days. Give a brief, sharp, "
+        f"2-sentence action recommendation for a logistics team. Do not use markdown format tags."
+    )
     
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        try:
-            async with client.stream("POST", OLLAMA_URL, json={
-                "model": "llama3.1",
-                "prompt": prompt,
-                "stream": True,
-            }) as resp:
-                if resp.status_code != 200:
-                    yield f"⚠️ Advisor core returned a status fault: {resp.status_code}"
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt_message,
+        "stream": True
+    }
+
+    full_generated_text = ""
+    
+    # FIX 2: Create a dedicated timeout configuration matrix. 
+    # Gives the LLM up to 60 seconds to process headers, while keeping connect times tight.
+    timeout_config = httpx.Timeout(60.0, connect=5.0, read=60.0)
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout_config) as client:
+            async with client.stream("POST", OLLAMA_URL, json=payload) as response:
+                if response.status_code != 200:
+                    yield f"◈ [Engine Error] HTTP Status Code: {response.status_code}"
                     return
 
-                async for line in resp.aiter_lines():
-                    if not line:
+                # FIX 1: Use aiter_text() instead of iter_text() for proper async streaming
+                async_text_iterator = response.aiter_text()
+                
+                async for chunk in async_text_iterator:
+                    if not chunk.strip():
                         continue
-                    try:
-                        data = json.loads(line)
-                        token = data.get("response", "")
-                        if token:
-                            yield token
-                        if data.get("done", False):
-                            break
-                    except json.JSONDecodeError:
-                        continue
-                        
-        except httpx.ConnectError:
-            # Fallback if Ollama is not actively running in the background
-            yield f"◈ [Local Core Offline] Alert status on {sku_id} indicates {days} days of stock remaining. Suggest immediate reorder review."
+                    
+                    lines = chunk.split("\n")
+                    for line in lines:
+                        if line.strip():
+                            try:
+                                json_data = json.loads(line)
+                                token = json_data.get("response", "")
+                                if token:
+                                    full_generated_text += token
+                                    yield token
+                            except Exception:
+                                continue
+                                
+        if full_generated_text.strip():
+            _advice_cache[cache_key] = full_generated_text
+
+    except httpx.ConnectError:
+        yield (
+            f"◈ [Connection Breakpoint]\n"
+            f"Ollama is unreachable at {OLLAMA_URL}. Ensure your local terminal "
+            f"is running 'ollama run {MODEL_NAME}'."
+        )
+    except httpx.ReadTimeout:
+        yield (
+            f"⚠️ [Processing Timeout]\n"
+            f"The local LLM engine took too long to generate an advisory token sequence. "
+            f"Check your local hardware utilization metrics."
+        )
