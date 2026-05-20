@@ -4,22 +4,25 @@ from routers.forecast import router as forecast_router
 from routers.stream import router as stream_router
 from routers.alerts import router as alerts_router
 
-app = FastAPI(title="Logistics Oracle Pipeline Architecture")
+app = FastAPI()
 
-# Configure CORS so your Next.js dashboard can connect securely
+# --- CRITICAL FIX: CORS CONFIGURATION ---
+origins = [
+    "http://localhost:3000",      # Local Next.js dev server
+    "http://127.0.0.1:3000",    # Alternative local loopback address
+    "http://192.168.100.151:3000" # Your exact LAN network address from Next.js logs
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,            # Allows traffic from your frontend origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],              # Allows GET, POST, OPTIONS, etc.
+    allow_headers=["*"],              # Allows all custom/standard headers
 )
+# ----------------------------------------
 
-# Fix your 404s by routing everything through the global '/api' path
-app.include_router(forecast_router, prefix="/api")
-app.include_router(stream_router, prefix="/api")
-app.include_router(alerts_router, prefix="/api")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+# Register your routers
+app.include_router(forecast_router)
+app.include_router(stream_router)
+app.include_router(alerts_router)
