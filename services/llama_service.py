@@ -36,9 +36,6 @@ async def stream_advice(sku_id: str, days: int, stock: int):
     }
 
     full_generated_text = ""
-    
-    # FIX 2: Create a dedicated timeout configuration matrix. 
-    # Gives the LLM up to 60 seconds to process headers, while keeping connect times tight.
     timeout_config = httpx.Timeout(60.0, connect=5.0, read=60.0)
 
     try:
@@ -48,24 +45,20 @@ async def stream_advice(sku_id: str, days: int, stock: int):
                     yield f"◈ [Engine Error] HTTP Status Code: {response.status_code}"
                     return
 
-                # FIX 1: Use aiter_text() instead of iter_text() for proper async streaming
-                async_text_iterator = response.aiter_text()
-                
-                async for chunk in async_text_iterator:
-                    if not chunk.strip():
+                # FIX: Use aiter_lines() to automatically assemble cut-off lines over the socket
+                async for line in response.aiter_lines():
+                    if not line.strip():
                         continue
                     
-                    lines = chunk.split("\n")
-                    for line in lines:
-                        if line.strip():
-                            try:
-                                json_data = json.loads(line)
-                                token = json_data.get("response", "")
-                                if token:
-                                    full_generated_text += token
-                                    yield token
-                            except Exception:
-                                continue
+                    try:
+                        json_data = json.loads(line)
+                        token = json_data.get("response", "")
+                        if token:
+                            full_generated_text += token
+                            yield token
+                    except Exception:
+                        # Silently skip any invalid trailing characters or blanks
+                        continue
                                 
         if full_generated_text.strip():
             _advice_cache[cache_key] = full_generated_text
