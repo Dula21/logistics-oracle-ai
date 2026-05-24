@@ -11,47 +11,61 @@ from dotenv import load_dotenv
 load_dotenv()
 router = APIRouter()
 
-# --- RUNTIME PATH CONFIGURATION ---
-# Appends parent project root directory so that prophet_service can be found cleanly
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from services.prophet_service import run_forecast
 
-# Global configuration variables
 MODEL_NAME = os.getenv("LLM_MODEL_NAME", "llama3.2")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/api/generate")
 
-# Memory caches to keep things fast
 _advice_cache: dict[str, str] = {}
 
 
 # =====================================================================
-# ENDPOINT 1: Static Numerical Matrix Engine (Matches Next.js Step 1)
+# ENDPOINT 1: Operational Dashboard (last 60 days)
 # =====================================================================
 @router.get("/api/forecast")
 async def get_forecast(sku: str = Query(..., description="Target SKU identification string")):
     """
-    Returns the core mathematical dataset parsed strictly from 2024/2025 rows.
+    Returns operational data scoped to last 60 days for dashboard KPIs and depletion chart.
     """
     try:
-        analytics_payload = await run_forecast(sku_id=sku, current_stock=0)
+        analytics_payload = await run_forecast(sku_id=sku, current_stock=0, mode="operational")
         return analytics_payload
     except Exception as err:
         raise HTTPException(
-            status_code=500, 
-            detail=f"Logistics Framework Numerical Parsing error: {str(err)}"
+            status_code=500,
+            detail=f"Operational forecast error: {str(err)}"
         )
 
 
 # =====================================================================
-# ENDPOINT 2: Token Streaming Logic Gateway (Matches Next.js Step 2)
+# ENDPOINT 2: Strategic Insights (full 2024 + 2025 history)
+# =====================================================================
+@router.get("/api/insights")
+async def get_insights(sku: str = Query(..., description="Target SKU identification string")):
+    """
+    Returns full 2024-2025 historical data for the seasonal insights comparison page.
+    Includes all Ramadan and promo spike annotations across both years.
+    """
+    try:
+        analytics_payload = await run_forecast(sku_id=sku, current_stock=0, mode="strategic")
+        return analytics_payload
+    except Exception as err:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Strategic insights error: {str(err)}"
+        )
+
+
+# =====================================================================
+# ENDPOINT 3: Token Streaming Logic Gateway
 # =====================================================================
 async def generate_stream_tokens(sku_id: str, days: int, stock: int, ramadan_factor: float, promo_factor: float):
     cache_key = f"{sku_id}_{days}_{stock}"
 
-    # 1. Cache hit abstraction layer: stream out instantly if computed before
     if cache_key in _advice_cache:
         cached_text = _advice_cache[cache_key]
         words = cached_text.split(" ")
@@ -60,7 +74,6 @@ async def generate_stream_tokens(sku_id: str, days: int, stock: int, ramadan_fac
             await asyncio.sleep(0.01)
         return
 
-    # Rich contextual business intelligence prompt customized for Dubai SMEs
     prompt_message = (
         f"You are an expert logistics consultant for Dubai SMEs in D3/JAFZA. "
         f"Analyze these inventory metrics for SKU {sku_id}: "
@@ -72,12 +85,7 @@ async def generate_stream_tokens(sku_id: str, days: int, stock: int, ramadan_fac
         f"Keep it professional and human. Do not use markdown headers, bolding, asterisks, or list formats."
     )
 
-    payload = {
-        "model": MODEL_NAME,
-        "prompt": prompt_message,
-        "stream": True,
-    }
-
+    payload = {"model": MODEL_NAME, "prompt": prompt_message, "stream": True}
     full_generated_text = ""
     timeout_config = httpx.Timeout(60.0, connect=5.0, read=60.0)
 
@@ -88,13 +96,10 @@ async def generate_stream_tokens(sku_id: str, days: int, stock: int, ramadan_fac
                     yield f"◈ [Engine Error] HTTP Status Code: {response.status_code}"
                     return
 
-                # Read chunk blocks directly down the line
                 async for chunk in response.aiter_text():
                     if not chunk.strip():
                         continue
-
-                    lines = chunk.split("\n")
-                    for line in lines:
+                    for line in chunk.split("\n"):
                         if line.strip():
                             try:
                                 json_data = json.loads(line)
@@ -109,19 +114,6 @@ async def generate_stream_tokens(sku_id: str, days: int, stock: int, ramadan_fac
             _advice_cache[cache_key] = full_generated_text
 
     except httpx.ConnectError:
-        yield (
-            f"◈ [Connection Breakpoint]\n"
-            f"Ollama is unreachable at {OLLAMA_URL}. Ensure your local terminal "
-            f"is running 'ollama run {MODEL_NAME}'."
-        )
+        yield f"◈ [Connection Breakpoint] Ollama unreachable at {OLLAMA_URL}."
     except httpx.ReadTimeout:
-        yield (
-            f"⚠️ [Processing Timeout]\n"
-            f"The local LLM engine took too long to generate an advisory token sequence."
-        )
-
-
-# NOTE:
-# /api/stream is intentionally implemented in routers/stream.py using services/llama_service.py.
-# This avoids conflicting duplicate route implementations.
-
+        yield "⚠️ [Processing Timeout] LLM engine took too long to respond."
