@@ -121,13 +121,18 @@ async def run_forecast(sku_id: str, current_stock: int, mode: str = "operational
     if cache_key in _forecast_cache:
         return _forecast_cache[cache_key]
 
-    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    ENV_DATA_PATH = os.getenv("DATA_SOURCE_PATH", "historic_sales.csv")
-    csv_path = (
-        ENV_DATA_PATH
-        if os.path.isabs(ENV_DATA_PATH)
-        else os.path.join(PROJECT_ROOT, ENV_DATA_PATH)
-    )
+    # Use dynamically active CSV (switches on upload, resets on reset)
+    try:
+        from routers.upload import get_active_csv
+        csv_path = get_active_csv()
+    except ImportError:
+        PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        ENV_DATA_PATH = os.getenv("DATA_SOURCE_PATH", "historic_sales.csv")
+        csv_path = (
+            ENV_DATA_PATH
+            if os.path.isabs(ENV_DATA_PATH)
+            else os.path.join(PROJECT_ROOT, ENV_DATA_PATH)
+        )
 
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"Master ledger file missing: {csv_path}")
