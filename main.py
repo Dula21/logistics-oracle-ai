@@ -75,10 +75,13 @@ async def prewarm_cache():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup — fire pre-warm in background, don't block server boot
-    asyncio.create_task(prewarm_cache())
+    # Only run the heavy pre-warm cache if running on a local development machine
+    if os.getenv("RENDER") is None: 
+        print("[Cache] Dev machine detected. Starting background pre-warm...")
+        asyncio.create_task(prewarm_cache())
+    else:
+        print("[Cache] Production Cloud detected. Skipping background local loops to optimize memory.")
     yield
-    # Shutdown — nothing to clean up
 
 
 app = FastAPI(
