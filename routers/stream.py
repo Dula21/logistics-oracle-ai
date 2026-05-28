@@ -11,7 +11,7 @@ from services.llama_service import stream_advice
 router = APIRouter()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL_NAME = os.getenv("LLM_MODEL_NAME", "llama3-8b-8192")
 
 _insights_cache: dict[str, str] = {}
