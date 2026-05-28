@@ -10,10 +10,13 @@ from services.llama_service import stream_advice
 
 router = APIRouter()
 
-MODEL_NAME = os.getenv("LLM_MODEL_NAME", "llama3.2")
-OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/api/generate")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL_NAME = os.getenv("LLM_MODEL_NAME", "llama-3.1-8b-instant")
 
 _insights_cache: dict[str, str] = {}
+
+PROHIBITED_TOPICS = ["crypto", "bitcoin", "stocks", "shares", "marketing", "hiring"]
 
 
 # =====================================================================
@@ -46,61 +49,81 @@ async def _stream_insights_advice(
             await asyncio.sleep(0.01)
         return
 
-    # GUARDRAIL INTEGRATION: Wrapped explicit 2026 timeline and domain rules inside the system prompt
-    prompt_message = (
-        f"System Role: Dubai logistics and regional supply chain consultant. "
-        f"Context Input: SKU {sku_id}: {avg_daily_sales} units/day, Ramadan scaling {ramadan_factor}x, promo scaling {promo_factor}x. "
-        f"Strategic Guardrails:\n"
-        f"- Provide exactly 2 sentences regarding Ramadan 2026 reorder timing and buffer quantity metrics.\n"
-        f"- Do not use markdown syntax, bolding, or header tokens.\n"
-        f"- Restrict domain scope exclusively to warehouse buffer capacities and logistics timelines."
-    )
+    if not GROQ_API_KEY:
+        yield "⚠️ GROQ_API_KEY not set in environment."
+        return
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a senior supply chain consultant for Dubai SMEs in JAFZA and D3. "
+                "Provide logistics advice only — warehouse buffers and procurement timelines. "
+                "Never use markdown, bullets, or headers."
+            )
+        },
+        {
+            "role": "user",
+            "content": (
+                f"SKU {sku_id}: {avg_daily_sales} units/day average sales. "
+                f"Ramadan demand spikes {ramadan_factor}x, promo events spike {promo_factor}x. "
+                f"Give exactly 2 sentences: when to reorder for Ramadan 2026 and how much buffer stock to hold."
+            )
+        }
+    ]
 
     payload = {
         "model": MODEL_NAME,
-        "prompt": prompt_message,
+        "messages": messages,
         "stream": True,
-        "options": {"num_predict": 80}
+        "max_tokens": 120,
+        "temperature": 0.3,
     }
+
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
     full_text = ""
-    timeout_config = httpx.Timeout(120.0, connect=5.0, read=120.0)
+    timeout_config = httpx.Timeout(30.0, connect=5.0, read=30.0)
 
     try:
         async with httpx.AsyncClient(timeout=timeout_config) as client:
-            async with client.stream("POST", OLLAMA_URL, json=payload) as response:
+            async with client.stream("POST", GROQ_URL, json=payload, headers=headers) as response:
                 if response.status_code != 200:
-                    yield f"◈ [Engine Error] HTTP {response.status_code}"
+                    error = await response.aread()
+                    yield f"◈ [Groq Error] HTTP {response.status_code}: {error.decode()[:200]}"
                     return
 
-                # LIST OF RESTRICTED TOPICS FOR TRANSIT DATA CLEANLINESS
-                PROHIBITED_TOPICS = ["crypto", "bitcoin", "pricing", "stocks", "shares", "marketing", "hiring"]
-
                 async for line in response.aiter_lines():
-                    if not line.strip():
+                    if not line.startswith("data: "):
                         continue
+                    data = line[6:]
+                    if data.strip() == "[DONE]":
+                        break
                     try:
-                        json_data = json.loads(line)
-                        token = json_data.get("response", "")
+                        chunk = json.loads(data)
+                        token = chunk["choices"][0]["delta"].get("content", "")
                         if token:
                             full_text += token
-                            
-                            # ACTIVE MID-STREAM INSPECTOR:
-                            # Terminate immediately if token generation strays outside bounds
-                            if any(topic in full_text.lower() for topic in PROHIBITED_TOPICS):
-                                yield "\n⚠️ [Stream Terminated]: Content flagged by domain boundary guardrail."
+
+                            # Domain guardrail
+                            if any(t in full_text.lower() for t in PROHIBITED_TOPICS):
+                                yield "\n⚠️ [Guardrail]: Content outside logistics domain detected."
                                 return
-                                
+
                             yield token
-                    except json.JSONDecodeError:
+                    except (json.JSONDecodeError, KeyError):
                         continue
 
         if full_text.strip():
             _insights_cache[cache_key] = full_text
 
     except httpx.ConnectError:
-        yield f"◈ [Connection Error] Ollama unreachable at {OLLAMA_URL}."
+        yield "◈ [Connection Error] Cannot reach Groq API. Check your network."
     except httpx.ReadTimeout:
-        yield "⚠️ [Timeout] LLM took too long to respond."
+        yield "⚠️ [Timeout] Groq took too long to respond."
 
 
 @router.get("/api/stream/insights")
