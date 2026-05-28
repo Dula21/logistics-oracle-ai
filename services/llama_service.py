@@ -23,10 +23,15 @@ async def stream_advice(sku_id: str, days: int, stock: int):
             await asyncio.sleep(0.01)
         return
 
+    # GUARDRAIL INTEGRATION: Wrapped system constraints into the prompt message context
     prompt_message = (
-        f"You are an expert logistics analyzer. SKU {sku_id} has {stock} units left "
-        f"and is projected to stock out in exactly {days} days. Give a brief, sharp, "
-        f"2-sentence action recommendation for a logistics team. Do not use markdown format tags."
+        f"System Role: You are an expert logistics analyzer engine. "
+        f"Context: SKU {sku_id} has {stock} units left and is projected to stock out in exactly {days} days. "
+        f"Operational Guardrails:\n"
+        f"- Give a brief, sharp, 2-sentence action recommendation for a logistics team.\n"
+        f"- Do not use markdown format tags.\n"
+        f"- Stick entirely to physical inventory routing and procurement. Do not give general financial advice.\n"
+        f"- CRITICAL: If days left is less than 7, your instructions must prioritize immediate reordering or urgent replenishment protocols."
     )
     
     payload = {
@@ -45,7 +50,6 @@ async def stream_advice(sku_id: str, days: int, stock: int):
                     yield f"◈ [Engine Error] HTTP Status Code: {response.status_code}"
                     return
 
-                # FIX: Use aiter_lines() to automatically assemble cut-off lines over the socket
                 async for line in response.aiter_lines():
                     if not line.strip():
                         continue
@@ -57,9 +61,17 @@ async def stream_advice(sku_id: str, days: int, stock: int):
                             full_generated_text += token
                             yield token
                     except Exception:
-                        # Silently skip any invalid trailing characters or blanks
                         continue
                                 
+        # POST-STREAM OUTPUT GUARDRAIL:
+        # If the timeline is critical (< 7 days) but the engine hallucinated soft or passive advice, 
+        # we step in and append an absolute warning to protect operational metrics.
+        if days < 7:
+            text_upper = full_generated_text.upper()
+            if any(w in text_upper for w in ["WAIT", "MONITOR", "DELAY", "STABLE", "SECURE"]):
+                yield "\n⚠️ [Guardrail Override]: Current depletion runway is CRITICAL. Initiate immediate stock procurement procedures regardless of passive indicators."
+                full_generated_text += " \n⚠️ [Guardrail Override]: Current depletion runway is CRITICAL. Initiate immediate stock procurement procedures regardless of passive indicators."
+
         if full_generated_text.strip():
             _advice_cache[cache_key] = full_generated_text
 
