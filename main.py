@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import httpx
 import asyncio
+import os
 
 from routers.forecast import router as forecast_router
 from routers.stream import router as stream_router
