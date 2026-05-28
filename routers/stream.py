@@ -17,7 +17,7 @@ _insights_cache: dict[str, str] = {}
 
 
 # =====================================================================
-# ENDPOINT 1: Operational dashboard advice (unchanged)
+# ENDPOINT 1: Operational dashboard advice
 # =====================================================================
 @router.get("/api/stream")
 async def stream_sku_advice(sku: str, days: int = 14, stock: int = 150):
@@ -46,10 +46,14 @@ async def _stream_insights_advice(
             await asyncio.sleep(0.01)
         return
 
+    # GUARDRAIL INTEGRATION: Wrapped explicit 2026 timeline and domain rules inside the system prompt
     prompt_message = (
-        f"Dubai logistics consultant. "
-        f"SKU {sku_id}: {avg_daily_sales} units/day, Ramadan {ramadan_factor}x, promo {promo_factor}x. "
-        f"2 sentences: Ramadan 2026 reorder timing and buffer quantity. No markdown."
+        f"System Role: Dubai logistics and regional supply chain consultant. "
+        f"Context Input: SKU {sku_id}: {avg_daily_sales} units/day, Ramadan scaling {ramadan_factor}x, promo scaling {promo_factor}x. "
+        f"Strategic Guardrails:\n"
+        f"- Provide exactly 2 sentences regarding Ramadan 2026 reorder timing and buffer quantity metrics.\n"
+        f"- Do not use markdown syntax, bolding, or header tokens.\n"
+        f"- Restrict domain scope exclusively to warehouse buffer capacities and logistics timelines."
     )
 
     payload = {
@@ -68,6 +72,9 @@ async def _stream_insights_advice(
                     yield f"◈ [Engine Error] HTTP {response.status_code}"
                     return
 
+                # LIST OF RESTRICTED TOPICS FOR TRANSIT DATA CLEANLINESS
+                PROHIBITED_TOPICS = ["crypto", "bitcoin", "pricing", "stocks", "shares", "marketing", "hiring"]
+
                 async for line in response.aiter_lines():
                     if not line.strip():
                         continue
@@ -76,6 +83,13 @@ async def _stream_insights_advice(
                         token = json_data.get("response", "")
                         if token:
                             full_text += token
+                            
+                            # ACTIVE MID-STREAM INSPECTOR:
+                            # Terminate immediately if token generation strays outside bounds
+                            if any(topic in full_text.lower() for topic in PROHIBITED_TOPICS):
+                                yield "\n⚠️ [Stream Terminated]: Content flagged by domain boundary guardrail."
+                                return
+                                
                             yield token
                     except json.JSONDecodeError:
                         continue
