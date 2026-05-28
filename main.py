@@ -10,7 +10,7 @@ from routers.upload import router as upload_router
 
 # SKUs to pre-warm on startup
 WATCHLIST = ["A1023", "B5421", "C9011"]
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://localhost:8000"
 
 
 async def prewarm_cache():
