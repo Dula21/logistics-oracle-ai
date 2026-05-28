@@ -17,7 +17,7 @@ if ROOT_DIR not in sys.path:
 
 from services.prophet_service import run_forecast
 
-MODEL_NAME = os.getenv("LLM_MODEL_NAME", "llama3-8b-8192")
+MODEL_NAME = os.getenv("LLM_MODEL_NAME", "llama-3.1-8b-instant")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/api/generate")
 
 _advice_cache: dict[str, str] = {}
