@@ -78,7 +78,7 @@ Follow these commands to configure and launch the system in a isolated local env
 ```
 4. **Boot up the server via Uvicorn with hot-reloading:**
 ```bash
-   uvicorn stream:router --reload --port 8000
+   uvicorn main:app --reload --port 8000
    ```
 
    ---
