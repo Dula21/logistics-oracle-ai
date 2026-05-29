@@ -28,21 +28,25 @@ async def stream_advice(sku_id: str, days: int, stock: int):
         yield "⚠️ GROQ_API_KEY not set in environment."
         return
 
+    # --- ADVANCED STRUCTURAL PROMPT TO ELIMINATE FLUFF ---
     messages = [
         {
             "role": "system",
             "content": (
-                "You are an expert logistics analyzer for Dubai SMEs operating in JAFZA and D3. "
-                "Give sharp, actionable inventory advice. "
-                "Never use markdown, headers, or bullet points. "
-                "If days to stockout is under 7, prioritize immediate reorder urgently."
+                "You are a strict, data-driven lead supply chain officer at JAFZA, Dubai. "
+                "You analyze incoming inventory metrics and issue sharp, definitive orders. "
+                "Never use markdown, headers, bullet points, or generic filler phrases like 'monitor trends', 'closely monitor', or 'ensure timely replenishment'. "
+                "Categorize your action by urgency using these strict rules:\n"
+                "- CRITICAL (Under 10 days): Issue an immediate emergency reorder today. Mandate an exact 45-day warehouse runway buffer.\n"
+                "- WARNING (10-20 days): Prepare procurement documents this week. Coordinate with regional logistics teams for incoming freight slots.\n"
+                "- STABLE (Over 20 days): No immediate action needed. Maintain current standard warehouse fulfillment cycles."
             )
         },
         {
             "role": "user",
             "content": (
-                f"SKU {sku_id} has {stock} units left and will stock out in {days} days. "
-                f"Give a 2-sentence action recommendation for the logistics team."
+                f"DATA INPUT -> SKU: {sku_id} | Current Stock: {stock} units | Runway: {days} days remaining. "
+                f"Identify the exact urgency category based on the runway days and state the operational instruction in precisely 2 direct sentences."
             )
         }
     ]
@@ -52,7 +56,7 @@ async def stream_advice(sku_id: str, days: int, stock: int):
         "messages": messages,
         "stream": True,
         "max_tokens": 120,
-        "temperature": 0.4,
+        "temperature": 0.2,  # Lowered temperature for higher mathematical determinism
     }
 
     headers = {

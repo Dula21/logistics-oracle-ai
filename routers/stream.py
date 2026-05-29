@@ -53,21 +53,25 @@ async def _stream_insights_advice(
         yield "⚠️ GROQ_API_KEY not set in environment."
         return
 
+    # --- ADVANCED STRATEGIC PROMPT REWRITE ---
     messages = [
         {
             "role": "system",
             "content": (
-                "You are a senior supply chain consultant for Dubai SMEs in JAFZA and D3. "
-                "Provide logistics advice only — warehouse buffers and procurement timelines. "
-                "Never use markdown, bullets, or headers."
+                "You are a senior supply chain architect for Dubai retail groups in JAFZA and D3. "
+                "You calculate exact procurement lead times based on mathematical demand spikes. "
+                "Never use markdown, bullet points, headers, or vague phrases like 'plan ahead' or 'monitor capacity'. "
+                "Calculate logistics deadlines relative to Ramadan 2026 (which begins late February 2026). "
+                "Your advice must mandate a clear, numbers-driven order buffer based directly on the provided multiplier factors."
             )
         },
         {
             "role": "user",
             "content": (
-                f"SKU {sku_id}: {avg_daily_sales} units/day average sales. "
-                f"Ramadan demand spikes {ramadan_factor}x, promo events spike {promo_factor}x. "
-                f"Give exactly 2 sentences: when to reorder for Ramadan 2026 and how much buffer stock to hold."
+                f"STRATEGIC CASE STUDY -> SKU: {sku_id} | Baseline Sales: {avg_daily_sales} units/day. "
+                f"Seasonal Factors -> Ramadan Spike: {ramadan_factor}x | Promo Spike: {promo_factor}x. "
+                f"State exactly when lead orders must land at Dubai ports to beat the pre-Ramadan freight bottleneck, "
+                f"and define the precise multiplied volume target. Output exactly 2 precise sentences."
             )
         }
     ]
@@ -77,7 +81,7 @@ async def _stream_insights_advice(
         "messages": messages,
         "stream": True,
         "max_tokens": 120,
-        "temperature": 0.3,
+        "temperature": 0.2,  # Lowered temperature to anchor logic metrics
     }
 
     headers = {
@@ -108,7 +112,7 @@ async def _stream_insights_advice(
                         if token:
                             full_text += token
 
-                            # Domain guardrail
+                            # Domain guardrail remains intact and protected
                             if any(t in full_text.lower() for t in PROHIBITED_TOPICS):
                                 yield "\n⚠️ [Guardrail]: Content outside logistics domain detected."
                                 return
