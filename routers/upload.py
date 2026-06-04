@@ -1,9 +1,10 @@
 import os
 import shutil
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException,Depends
 from fastapi.responses import JSONResponse
 import pandas as pd
+from auth.dependencies import verify_token
 
 router = APIRouter()
 
@@ -30,7 +31,10 @@ def set_active_csv(path: str):
 # ENDPOINT 1: Upload a new CSV
 # =====================================================================
 @router.post("/api/upload")
-async def upload_csv(file: UploadFile = File(...)):
+async def upload_csv(
+    file: UploadFile = File(...),
+    user_id: str = Depends(verify_token)
+):
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only .csv files are accepted.")
 
@@ -93,7 +97,7 @@ async def upload_csv(file: UploadFile = File(...)):
 # ENDPOINT 2: Reset to original CSV
 # =====================================================================
 @router.post("/api/upload/reset")
-async def reset_to_original():
+async def reset_to_original(user_id: str = Depends(verify_token)):
     if not os.path.exists(ORIGINAL_CSV):
         raise HTTPException(status_code=404, detail="Original CSV not found.")
 

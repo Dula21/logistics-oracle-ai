@@ -5,3 +5,5 @@ pandas
 python-dotenv
 python-multipart
 prophet
+python-jose[cryptography]
+passlib[bcrypt]
