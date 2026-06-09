@@ -6,7 +6,10 @@ import asyncio
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from dotenv import load_dotenv
+from dotenv import load_dotenv 
+from pydantic import BaseModel
+from typing import List
+
 
 load_dotenv()
 router = APIRouter()
@@ -117,3 +120,37 @@ async def generate_stream_tokens(sku_id: str, days: int, stock: int, ramadan_fac
         yield f"◈ [Connection Breakpoint] Ollama unreachable at {OLLAMA_URL}."
     except httpx.ReadTimeout:
         yield "⚠️ [Processing Timeout] LLM engine took too long to respond."
+        
+        
+
+class BatchForecastRequest(BaseModel):
+    skus: List[str]
+    mode: str = "operational"
+
+@router.post("/api/forecast/batch")
+async def forecast_batch(request: BatchForecastRequest):
+    """
+    Returns forecasts for multiple SKUs in parallel.
+    Max 20 SKUs per request.
+    """
+    if len(request.skus) == 0:
+        raise HTTPException(status_code=400, detail="No SKUs provided")
+    
+    if len(request.skus) > 20:
+        raise HTTPException(status_code=400, detail="Max 20 SKUs per request")
+
+    results = await asyncio.gather(
+        *[run_forecast(sku_id=sku, current_stock=0, mode=request.mode) 
+          for sku in request.skus],
+        return_exceptions=True
+    )
+
+    forecasts = []
+    errors = []
+    for sku, result in zip(request.skus, results):
+        if isinstance(result, Exception):
+            errors.append({"sku": sku, "error": str(result)})
+        else:
+            forecasts.append(result)
+
+    return {"forecasts": forecasts, "errors": errors}
