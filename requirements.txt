@@ -5,3 +5,13 @@ pandas
 python-dotenv
 python-multipart
 prophet
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1
+sqlalchemy
+psycopg2-binary
+alembic
+structlog
+pytest
+pytest-asyncio
+httpx

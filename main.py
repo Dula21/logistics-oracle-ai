@@ -4,10 +4,17 @@ from contextlib import asynccontextmanager
 import httpx
 import asyncio
 import os
-
+from auth.router import router as auth_router
 from routers.forecast import router as forecast_router
 from routers.stream import router as stream_router
 from routers.upload import router as upload_router
+from routers.history import router as history_router
+from routers.alerts import router as alert_router
+from logger import setup_logging, get_logger
+
+
+setup_logging()
+logger = get_logger("main")
 
 # SKUs to pre-warm on startup
 WATCHLIST = ["A1023", "B5421", "C9011"]
@@ -101,7 +108,10 @@ app.add_middleware(
 app.include_router(forecast_router)
 app.include_router(stream_router)
 app.include_router(upload_router)
+app.include_router(auth_router)
 
+app.include_router(alert_router)
+app.include_router(history_router)
 
 @app.get("/")
 def read_root():
