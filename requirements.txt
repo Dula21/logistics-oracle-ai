@@ -12,3 +12,6 @@ sqlalchemy
 psycopg2-binary
 alembic
 structlog
+pytest
+pytest-asyncio
+httpx
