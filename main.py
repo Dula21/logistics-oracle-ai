@@ -10,6 +10,11 @@ from routers.stream import router as stream_router
 from routers.upload import router as upload_router
 from routers.history import router as history_router
 from routers.alerts import router as alert_router
+from logger import setup_logging, get_logger
+
+
+setup_logging()
+logger = get_logger("main")
 
 # SKUs to pre-warm on startup
 WATCHLIST = ["A1023", "B5421", "C9011"]

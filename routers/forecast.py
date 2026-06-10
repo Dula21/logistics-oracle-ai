@@ -9,7 +9,8 @@ from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv 
 from pydantic import BaseModel
 from typing import List
-
+from logger import get_logger
+logger = get_logger("forecast")
 
 load_dotenv()
 router = APIRouter()
@@ -30,38 +31,29 @@ _advice_cache: dict[str, str] = {}
 # ENDPOINT 1: Operational Dashboard (last 60 days)
 # =====================================================================
 @router.get("/api/forecast")
-async def get_forecast(sku: str = Query(..., description="Target SKU identification string")):
-    """
-    Returns operational data scoped to last 60 days for dashboard KPIs and depletion chart.
-    """
+async def get_forecast(sku: str = Query(...)):
+    logger.info("forecast_request", sku=sku, mode="operational")
     try:
-        analytics_payload = await run_forecast(sku_id=sku, current_stock=0, mode="operational")
-        return analytics_payload
+        result = await run_forecast(sku_id=sku, current_stock=0, mode="operational")
+        logger.info("forecast_success", sku=sku, days_until_stockout=result["days_until_stockout"])
+        return result
     except Exception as err:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Operational forecast error: {str(err)}"
-        )
-
+        logger.error("forecast_failed", sku=sku, error=str(err))
+        raise HTTPException(status_code=500, detail=f"Operational forecast error: {str(err)}")
 
 # =====================================================================
 # ENDPOINT 2: Strategic Insights (full 2024 + 2025 history)
 # =====================================================================
 @router.get("/api/insights")
-async def get_insights(sku: str = Query(..., description="Target SKU identification string")):
-    """
-    Returns full 2024-2025 historical data for the seasonal insights comparison page.
-    Includes all Ramadan and promo spike annotations across both years.
-    """
+async def get_insights(sku: str = Query(...)):
+    logger.info("insights_request", sku=sku, mode="strategic")
     try:
-        analytics_payload = await run_forecast(sku_id=sku, current_stock=0, mode="strategic")
-        return analytics_payload
+        result = await run_forecast(sku_id=sku, current_stock=0, mode="strategic")
+        logger.info("insights_success", sku=sku)
+        return result
     except Exception as err:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Strategic insights error: {str(err)}"
-        )
-
+        logger.error("insights_failed", sku=sku, error=str(err))
+        raise HTTPException(status_code=500, detail=f"Strategic insights error: {str(err)}")
 
 # =====================================================================
 # ENDPOINT 3: Token Streaming Logic Gateway

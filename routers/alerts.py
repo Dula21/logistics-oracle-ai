@@ -4,16 +4,16 @@ import pandas as pd
 
 from routers.upload import get_active_csv
 from services.prophet_service import run_forecast
+from logger import get_logger
 
+logger = get_logger("alerts")
 router = APIRouter()
 
 
 @router.get("/api/alerts")
 async def get_alerts():
-    """
-    Returns forecast status for ALL SKUs in the active CSV, sorted by urgency.
-    Red < 7 days, Amber 7-14 days, Green 14+ days.
-    """
+    logger.info("alerts_request")
+
     try:
         csv_path = get_active_csv()
         df = pd.read_csv(csv_path)
@@ -25,7 +25,6 @@ async def get_alerts():
     if not skus:
         return {"alerts": []}
 
-    # Run all forecasts in parallel
     results = await asyncio.gather(
         *[run_forecast(sku_id=sku, current_stock=0, mode="operational") for sku in skus],
         return_exceptions=True
@@ -59,8 +58,9 @@ async def get_alerts():
             "message": message,
         })
 
-    # Sort by urgency: red first, amber second, green last
     priority = {"red": 0, "amber": 1, "green": 2}
     alerts.sort(key=lambda x: (priority[x["status"]], x["days_until_stockout"]))
+
+    logger.info("alerts_success", total=len(alerts), red=sum(1 for a in alerts if a["status"] == "red"))
 
     return {"alerts": alerts}

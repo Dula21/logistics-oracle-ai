@@ -1,22 +1,19 @@
 import os
-import shutil
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, HTTPException,Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import pandas as pd
-
-
 from auth.dependencies import verify_admin
+from logger import get_logger
 
+logger = get_logger("upload")
 router = APIRouter()
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 UPLOADS_DIR = os.path.join(PROJECT_ROOT, "uploads")
 ORIGINAL_CSV = os.path.join(PROJECT_ROOT, "historic_sales.csv")
 
-# Runtime pointer — which CSV the app is currently using
 _active_csv_path: str = ORIGINAL_CSV
-
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 
@@ -29,14 +26,13 @@ def set_active_csv(path: str):
     _active_csv_path = path
 
 
-# =====================================================================
-# ENDPOINT 1: Upload a new CSV
-# =====================================================================
 @router.post("/api/upload")
 async def upload_csv(
     file: UploadFile = File(...),
     user_id: str = Depends(verify_admin)
 ):
+    logger.info("csv_upload_start", filename=file.filename, user_id=user_id)
+
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only .csv files are accepted.")
 
@@ -50,7 +46,6 @@ async def upload_csv(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File save failed: {str(e)}")
 
-    # Validate CSV structure
     try:
         df = pd.read_csv(save_path)
         df.columns = [col.strip() for col in df.columns]
@@ -64,18 +59,17 @@ async def upload_csv(
                 detail=f"CSV missing required columns: {', '.join(missing)}"
             )
 
-        # Extract unique SKUs
         skus = df["SKU_ID"].astype(str).str.strip().str.upper().unique().tolist()
         if not skus:
             os.remove(save_path)
             raise HTTPException(status_code=422, detail="No SKU data found in CSV.")
 
-        # Switch app to use this new file
         set_active_csv(save_path)
 
-        # Clear forecast cache so new data is used
         from services.prophet_service import _forecast_cache
         _forecast_cache.clear()
+
+        logger.info("csv_upload_success", filename=file.filename, skus=len(skus), rows=len(df), user_id=user_id)
 
         return JSONResponse({
             "status": "success",
@@ -95,9 +89,6 @@ async def upload_csv(
         raise HTTPException(status_code=500, detail=f"CSV validation failed: {str(e)}")
 
 
-# =====================================================================
-# ENDPOINT 2: Reset to original CSV
-# =====================================================================
 @router.post("/api/upload/reset")
 async def reset_to_original(user_id: str = Depends(verify_admin)):
     if not os.path.exists(ORIGINAL_CSV):
@@ -111,6 +102,8 @@ async def reset_to_original(user_id: str = Depends(verify_admin)):
     df = pd.read_csv(ORIGINAL_CSV)
     skus = df["SKU_ID"].astype(str).str.strip().str.upper().unique().tolist()
 
+    logger.info("csv_reset", user_id=user_id)
+
     return JSONResponse({
         "status": "reset",
         "skus_detected": skus,
@@ -119,9 +112,6 @@ async def reset_to_original(user_id: str = Depends(verify_admin)):
     })
 
 
-# =====================================================================
-# ENDPOINT 3: Current CSV status
-# =====================================================================
 @router.get("/api/upload/status")
 async def upload_status():
     is_original = _active_csv_path == ORIGINAL_CSV
