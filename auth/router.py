@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -30,7 +30,7 @@ def create_token(user_id: str, role: str) -> str:
 @router.post("/register")
 def register(
     form: OAuth2PasswordRequestForm = Depends(),
-    role: str = "manager",
+    role: str = Form("manager"),
     db: Session = Depends(get_db)
 ):
     existing = db.query(User).filter(User.email == form.username).first()
@@ -38,7 +38,7 @@ def register(
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # Validate role
-    allowed_roles = ["manager", "warehouse", "finance", "admin"]
+    allowed_roles = ["manager", "warehouse", "finance"]
     if role not in allowed_roles:
         role = "manager"
 
