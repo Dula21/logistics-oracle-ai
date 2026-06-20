@@ -28,16 +28,25 @@ def create_token(user_id: str, role: str) -> str:
 
 
 @router.post("/register")
-def register(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def register(
+    form: OAuth2PasswordRequestForm = Depends(),
+    role: str = "manager",
+    db: Session = Depends(get_db)
+):
     existing = db.query(User).filter(User.email == form.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Validate role
+    allowed_roles = ["manager", "warehouse", "finance", "admin"]
+    if role not in allowed_roles:
+        role = "manager"
 
     user = User(
         id=str(uuid.uuid4()),
         email=form.username,
         hashed_password=pwd_context.hash(form.password),
-        role="manager"
+        role=role
     )
     db.add(user)
     db.commit()
@@ -60,3 +69,5 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 @router.get("/me")
 def get_me(db: Session = Depends(get_db), token: str = Depends(lambda: None)):
     return {"message": "Auth working"}
+
+

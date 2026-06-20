@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 import pandas as pd
 from auth.dependencies import verify_admin
 from logger import get_logger
+from cache import cache_clear_all
 
 logger = get_logger("upload")
 router = APIRouter()
@@ -68,6 +69,7 @@ async def upload_csv(
 
         from services.prophet_service import _forecast_cache
         _forecast_cache.clear()
+        cache_clear_all()
 
         logger.info("csv_upload_success", filename=file.filename, skus=len(skus), rows=len(df), user_id=user_id)
 
@@ -98,6 +100,7 @@ async def reset_to_original(user_id: str = Depends(verify_admin)):
 
     from services.prophet_service import _forecast_cache
     _forecast_cache.clear()
+    cache_clear_all()
 
     df = pd.read_csv(ORIGINAL_CSV)
     skus = df["SKU_ID"].astype(str).str.strip().str.upper().unique().tolist()
