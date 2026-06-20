@@ -4,6 +4,7 @@ import concurrent.futures
 import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from cache import cache_get, cache_set
 
 load_dotenv()
 
@@ -118,8 +119,16 @@ def _heavy_compute_numerical_brain(df_sku: pd.DataFrame, current_stock: int, mod
 
 async def run_forecast(sku_id: str, current_stock: int, mode: str = "operational"):
     cache_key = f"{sku_id}_{mode}"
+
+    # Layer 1: in-memory (fastest, this process only)
     if cache_key in _forecast_cache:
         return _forecast_cache[cache_key]
+
+    # Layer 2: Redis (fast, shared across restarts/instances)
+    redis_cached = cache_get(f"forecast:{cache_key}")
+    if redis_cached is not None:
+        _forecast_cache[cache_key] = redis_cached
+        return redis_cached
 
     # Use dynamically active CSV (switches on upload, resets on reset)
     try:
@@ -192,4 +201,5 @@ async def run_forecast(sku_id: str, current_stock: int, mode: str = "operational
     )
 
     _forecast_cache[cache_key] = computed_result
+    cache_set(f"forecast:{cache_key}", computed_result, ttl_seconds=3600)
     return computed_result
