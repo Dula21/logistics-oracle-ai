@@ -22,3 +22,4 @@ class ReorderDecision(Base):
     advice = Column(String, nullable=True)
     status = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
