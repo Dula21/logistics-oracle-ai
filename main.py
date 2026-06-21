@@ -83,6 +83,16 @@ async def prewarm_cache():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Run pending database migrations on startup
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+        command.upgrade(alembic_cfg, "head")
+        print("[Migrations] Database schema up to date.")
+    except Exception as e:
+        print(f"[Migrations] Warning: migration check failed: {e}")
+
     # Only run the heavy pre-warm cache if running on a local development machine
     if os.getenv("RENDER") is None: 
         print("[Cache] Dev machine detected. Starting background pre-warm...")
