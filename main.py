@@ -150,6 +150,9 @@ app.include_router(auth_router)
 app.include_router(alert_router)
 app.include_router(history_router)
 
+from metrics import metrics_app
+app.mount("/metrics", metrics_app)
+
 @app.get("/")
 def read_root():
     return {"status": "Online", "engine": "FastAPI Core Matrix Active"}

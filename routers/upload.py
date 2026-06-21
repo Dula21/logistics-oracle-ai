@@ -6,6 +6,7 @@ import pandas as pd
 from auth.dependencies import verify_admin
 from logger import get_logger
 from cache import cache_clear_all
+from metrics import upload_requests_total
 
 logger = get_logger("upload")
 router = APIRouter(tags=["Upload"])
@@ -72,6 +73,7 @@ async def upload_csv(
         cache_clear_all()
 
         logger.info("csv_upload_success", filename=file.filename, skus=len(skus), rows=len(df), user_id=user_id)
+        upload_requests_total.labels(status="success").inc()
 
         return JSONResponse({
             "status": "success",
@@ -84,8 +86,10 @@ async def upload_csv(
         })
 
     except HTTPException:
+        upload_requests_total.labels(status="error").inc()
         raise
     except Exception as e:
+        upload_requests_total.labels(status="error").inc()
         if os.path.exists(save_path):
             os.remove(save_path)
         raise HTTPException(status_code=500, detail=f"CSV validation failed: {str(e)}")
