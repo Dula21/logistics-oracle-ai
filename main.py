@@ -83,6 +83,16 @@ async def prewarm_cache():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Run pending database migrations on startup
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+        command.upgrade(alembic_cfg, "head")
+        print("[Migrations] Database schema up to date.")
+    except Exception as e:
+        print(f"[Migrations] Warning: migration check failed: {e}")
+
     # Only run the heavy pre-warm cache if running on a local development machine
     if os.getenv("RENDER") is None: 
         print("[Cache] Dev machine detected. Starting background pre-warm...")
@@ -94,8 +104,35 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Dubai Logistics Oracle SME Engine",
+     description="""
+AI-powered inventory forecasting and reorder advisory system for Dubai SMEs.
+## Features
+- **Forecasting**: Prophet-based demand prediction (operational + strategic modes)
+- **AI Advisory**: Real-time reorder recommendations via Llama (Groq + Ollama)
+- **Multi-SKU**: Bulk forecasting and inventory-wide alerts
+- **Auth**: JWT-based authentication with role-based access control (admin, manager, warehouse, finance)
+- **History**: Persistent audit trail of reorder decisions
+
+## Authentication
+Most endpoints are public (forecasts, insights, alerts). Protected endpoints require a Bearer token:
+Get a token via `/auth/login` or `/auth/register`.
+
+## Roles
+| Role | Upload CSV | View Forecasts | Save History |
+|------|:---:|:---:|:---:|
+| admin | ✅ | ✅ | ✅ |
+| manager | ❌ | ✅ | ✅ |
+| warehouse | ❌ | ✅ | ✅ |
+| finance | ❌ | ✅ | ✅ |
+""",
+    version="1.0.0",
+    contact={
+        "name": "Logistics Oracle",
+        "url": "https://github.com/Dula21/logistics-oracle-ai",
+    },
     lifespan=lifespan
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -112,6 +149,9 @@ app.include_router(auth_router)
 
 app.include_router(alert_router)
 app.include_router(history_router)
+
+from metrics import metrics_app
+app.mount("/metrics", metrics_app)
 
 @app.get("/")
 def read_root():

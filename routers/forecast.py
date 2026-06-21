@@ -12,8 +12,11 @@ from typing import List
 from logger import get_logger
 logger = get_logger("forecast")
 
+from metrics import forecast_requests_total, forecast_latency_seconds
+import time
+
 load_dotenv()
-router = APIRouter()
+router = APIRouter(tags=["Forecast"])
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
@@ -33,11 +36,16 @@ _advice_cache: dict[str, str] = {}
 @router.get("/api/forecast")
 async def get_forecast(sku: str = Query(...)):
     logger.info("forecast_request", sku=sku, mode="operational")
+    start = time.time()
     try:
         result = await run_forecast(sku_id=sku, current_stock=0, mode="operational")
+        duration = time.time() - start
+        forecast_latency_seconds.labels(mode="operational").observe(duration)
+        forecast_requests_total.labels(sku=sku, mode="operational", status="success").inc()
         logger.info("forecast_success", sku=sku, days_until_stockout=result["days_until_stockout"])
         return result
     except Exception as err:
+        forecast_requests_total.labels(sku=sku, mode="operational", status="error").inc()
         logger.error("forecast_failed", sku=sku, error=str(err))
         raise HTTPException(status_code=500, detail=f"Operational forecast error: {str(err)}")
 

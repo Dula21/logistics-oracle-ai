@@ -6,13 +6,17 @@ from routers.upload import get_active_csv
 from services.prophet_service import run_forecast
 from logger import get_logger
 
+from metrics import alerts_requests_total, alerts_latency_seconds
+import time
+
 logger = get_logger("alerts")
-router = APIRouter()
+router = APIRouter(tags=["Alerts"])
 
 
 @router.get("/api/alerts")
 async def get_alerts():
     logger.info("alerts_request")
+    start = time.time()
 
     try:
         csv_path = get_active_csv()
@@ -20,6 +24,7 @@ async def get_alerts():
         df.columns = [col.strip() for col in df.columns]
         skus = df["SKU_ID"].astype(str).str.strip().str.upper().unique().tolist()
     except Exception as e:
+        alerts_requests_total.labels(status="error").inc()
         raise HTTPException(status_code=500, detail=f"CSV read error: {str(e)}")
 
     if not skus:
@@ -61,6 +66,9 @@ async def get_alerts():
     priority = {"red": 0, "amber": 1, "green": 2}
     alerts.sort(key=lambda x: (priority[x["status"]], x["days_until_stockout"]))
 
+    duration = time.time() - start
+    alerts_latency_seconds.observe(duration)
+    alerts_requests_total.labels(status="success").inc()
     logger.info("alerts_success", total=len(alerts), red=sum(1 for a in alerts if a["status"] == "red"))
 
     return {"alerts": alerts}
