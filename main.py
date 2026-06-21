@@ -104,8 +104,35 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Dubai Logistics Oracle SME Engine",
+     description="""
+AI-powered inventory forecasting and reorder advisory system for Dubai SMEs.
+## Features
+- **Forecasting**: Prophet-based demand prediction (operational + strategic modes)
+- **AI Advisory**: Real-time reorder recommendations via Llama (Groq + Ollama)
+- **Multi-SKU**: Bulk forecasting and inventory-wide alerts
+- **Auth**: JWT-based authentication with role-based access control (admin, manager, warehouse, finance)
+- **History**: Persistent audit trail of reorder decisions
+
+## Authentication
+Most endpoints are public (forecasts, insights, alerts). Protected endpoints require a Bearer token:
+Get a token via `/auth/login` or `/auth/register`.
+
+## Roles
+| Role | Upload CSV | View Forecasts | Save History |
+|------|:---:|:---:|:---:|
+| admin | ✅ | ✅ | ✅ |
+| manager | ❌ | ✅ | ✅ |
+| warehouse | ❌ | ✅ | ✅ |
+| finance | ❌ | ✅ | ✅ |
+""",
+    version="1.0.0",
+    contact={
+        "name": "Logistics Oracle",
+        "url": "https://github.com/Dula21/logistics-oracle-ai",
+    },
     lifespan=lifespan
 )
+
 
 app.add_middleware(
     CORSMiddleware,

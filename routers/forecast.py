@@ -13,7 +13,7 @@ from logger import get_logger
 logger = get_logger("forecast")
 
 load_dotenv()
-router = APIRouter()
+router = APIRouter(tags=["Forecast"])
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:

@@ -8,7 +8,7 @@ from logger import get_logger
 from cache import cache_clear_all
 
 logger = get_logger("upload")
-router = APIRouter()
+router = APIRouter(tags=["Upload"])
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 UPLOADS_DIR = os.path.join(PROJECT_ROOT, "uploads")

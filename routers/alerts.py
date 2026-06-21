@@ -7,7 +7,7 @@ from services.prophet_service import run_forecast
 from logger import get_logger
 
 logger = get_logger("alerts")
-router = APIRouter()
+router = APIRouter(tags=["Alerts"])
 
 
 @router.get("/api/alerts")

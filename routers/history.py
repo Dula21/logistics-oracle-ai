@@ -10,7 +10,7 @@ from database import get_db
 from models.db_models import ReorderDecision
 from auth.dependencies import verify_token
 
-router = APIRouter()
+router = APIRouter(tags=["History"])
 
 
 class DecisionInput(BaseModel):

@@ -10,7 +10,7 @@ import os
 from database import get_db
 from models.db_models import User
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["Auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fallback-secret-dev-only")
